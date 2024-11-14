@@ -1,0 +1,317 @@
+﻿<div>
+    <label for="year">Year:</label>
+    <select id="year">
+        @for (int i = DateTime.Now.Year; i >= DateTime.Now.Year - 10; i--)
+        {
+            <option value="@i">@i</option>
+        }
+    </select>
+
+    <label for="month">Month:</label>
+    <select id="month">
+        @for (int i = 1; i <= 12; i++)
+        {
+            <option value="@i">@System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(i)</option>
+        }
+    </select>
+
+    <button id="viewButton" type="button">View</button>
+    <button id="addButton" type="button">+</button> <!-- Plus button for adding new entry -->
+</div>
+
+<div id="addModal" style="display: none;">
+    <h3>Add New Time Entry</h3>
+    <form id="addForm">;
+        <table class="form-table">
+            <tr hidden>
+                <td><label for="ID">Work Date:</label></td>
+                <td><input type="text" id="ID" ></td>
+            </tr>
+            <tr>
+                <td><label for="workDate">Work Date:</label></td>
+                <td><input type="date" id="workDate" required></td>
+            </tr>
+            <tr>
+                <td><label for="work">Work:</label></td>
+                <td><input type="text" id="work" required></td>
+            </tr>
+            <tr>
+                <td><label for="remarks">Remarks:</label></td>
+                <td><input type="text" id="remarks" required></td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <button type="submit" id="saveButton">Save</button>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <button type="button" id="closeModal">Cancel</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+ 
+    <table class="table" id="timesheetdata">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Work Date</th>
+                <th>Work</th>
+                <th>Remarks</th>
+                <th>Actions</th> <!-- Add Actions column -->
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var entry in Model)
+            {
+                <tr data-id="@entry.Id">
+                    <td>@entry.Id</td>
+                    <td>@entry.WorkDate.ToString("yyyy-MM-dd")</td>
+                    <td>@entry.Work</td>
+                    <td>@entry.Remarks</td>
+                    <td>
+                        <!-- Edit Button -->
+                        <button class="editButton">Edit</button>
+                        <!-- Delete Button -->
+                        <button class="deleteButton">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+@section Scripts {
+    <script src="https://ajax.aspnetcdn.com/ajax/jquery/jquery-3.5.1.min.js"></script> 
+   
+    <script type="text/javascript">
+        $(document).ready(function () {
+            // View Button click handler
+            $('#viewButton').on('click', function () {
+                var year = $('#year').val();
+                var month = $('#month').val();
+
+                $.ajax({
+                    url: '@Url.Action("LoadData", "Login")',
+                    type: 'GET',
+                    data: { year: year, month: month },
+                    success: function (data) {
+                        var tbody = $('#timesheetdata tbody');
+                        tbody.empty();
+
+                        if (data.length === 0) {
+                            tbody.append('<tr><td colspan="5">No records found</td></tr>');
+                        } else {
+                            $.each(data, function (index, entry) {
+                                var row = '<tr data-id="' + entry.Id + '">' +
+                                    '<td>' + entry.Id + '</td>' +
+                                    '<td>' + formatDate(entry.WorkDate) + '</td>' +
+                                    '<td>' + entry.Work + '</td>' +
+                                    '<td>' + entry.Remarks + '</td>' +
+                                    '<td>' +
+                                    '<button class="editButton">Edit</button>' +
+                                    '<button class="deleteButton">Delete</button>' +
+                                    '</td>' +
+                                    '</tr>';
+                                tbody.append(row);
+                            });
+                        }
+                    },
+                    error: function () {
+                        alert("An error occurred while loading data.");
+                    }
+                });
+            });
+
+            // Add Button click handler - show modal
+            $('#addButton').on('click', function () {
+                debugger;
+                // Reset form fields when opening modal for adding new entry
+                $('#workDate').val('');
+                $('#work').val('');
+                $('#remarks').val('');
+                $('#saveButton').text('Save'); // Reset Save button text
+                $('#saveButton').off('click').on('click', function () {
+                    debugger;
+                    addEntry(); // Trigger add entry when Save button is clicked
+                });
+
+                // Show modal for adding new entry
+                $('#addModal').show();
+            });
+
+            // Edit Button click handler
+            $(document).on('click', '.editButton', function () {
+                var row = $(this).closest('tr');
+                var id = row.data('id');
+                var workDate = row.find('td:nth-child(2)').text();  // Work Date in 'yyyy-MM-dd' format
+                var work = row.find('td:nth-child(3)').text();      // Work column text
+                var remarks = row.find('td:nth-child(4)').text();   // Remarks column text
+
+                // Bind the data to the modal fields
+                $('#workDate').val(workDate);  // Set the value for the date field
+                $('#work').val(work);          // Set the value for the work text field
+                $('#remarks').val(remarks);    // Set the value for the remarks text field
+
+                // Change button text to "Update" and update the action for the form submission
+                $('#saveButton').text('Update').off('click').on('click', function () {
+                    updateEntry(id, workDate, work, remarks);
+                });
+
+                // Show the modal
+                $('#addModal').show();
+            });
+
+            // Delete Button click handler
+            $(document).on('click', '.deleteButton', function () {
+                var row = $(this).closest('tr');
+                var id = row.data('id');
+
+                if (confirm("Are you sure you want to delete this record?")) {
+                    // Call the delete function
+                    deleteEntry(id);
+                }
+            });
+
+            // Add new entry to the database
+            function addEntry() {
+                debugger;
+                var workDate = $('#workDate').val();
+                var work = $('#work').val();
+                var remarks = $('#remarks').val();
+
+                $.ajax({
+                    url: '@Url.Action("AddEntry", "Login")', // Controller action for adding
+                    type: 'POST',
+                    data: {
+                        workDate: workDate,
+                        work: work,
+                        remarks: remarks
+                    },
+                    success: function (data) {
+                        if (data.success) {
+                            alert("Entry saved successfully.");
+                            $('#addModal').hide(); // Close the modal
+                            $('#viewButton').click(); // Reload the timesheet data
+                        } else {
+                            alert("An error occurred while saving data.");
+                        }
+                    },
+                    error: function () {
+                        alert("An error occurred while saving data.");
+                    }
+                });
+            }
+
+            // Update the entry
+            function updateEntry(id, workDate, work, remarks) {
+                var updatedWorkDate = $('#workDate').val();
+                var updatedWork = $('#work').val();
+                var updatedRemarks = $('#remarks').val();
+
+                $.ajax({
+                    url: '@Url.Action("UpdateEntry", "Login")', // Controller action for updating
+                    type: 'POST',
+                    data: {
+                        id: id,
+                        workDate: updatedWorkDate,
+                        work: updatedWork,
+                        remarks: updatedRemarks
+                    },
+                    success: function (data) {
+                        if (data.success) {
+                            alert("Entry updated successfully.");
+                            $('#addModal').hide(); // Close the modal
+                            $('#viewButton').click(); // Reload data
+                        } else {
+                            alert("An error occurred while updating data.");
+                        }
+                    },
+                    error: function () {
+                        alert("An error occurred while updating data.");
+                    }
+                });
+            }
+
+            // Delete the entry
+            function deleteEntry(id) {
+                $.ajax({
+                    url: '@Url.Action("DeleteEntry", "Login")', // Controller action for deleting
+                    type: 'POST',
+                    data: { id: id },
+                    success: function (data) {
+                        if (data.success) {
+                            alert("Entry deleted successfully.");
+                            $('#viewButton').click(); // Reload data
+                        } else {
+                            alert("An error occurred while deleting data.");
+                        }
+                    },
+                    error: function () {
+                        alert("An error occurred while deleting data.");
+                    }
+                });
+            }
+
+            // Close modal when 'Cancel' button is clicked
+            $('#closeModal').on('click', function () {
+                $('#addModal').hide();
+            });
+        });
+
+
+        function formatDate(dateString) {
+            var date = new Date(dateString);
+            var day = String(date.getDate()).padStart(2, '0');
+            var month = String(date.getMonth() + 1).padStart(2, '0');
+            var year = date.getFullYear();
+            var hours = String(date.getHours()).padStart(2, '0');
+            var minutes = String(date.getMinutes()).padStart(2, '0');
+            var seconds = String(date.getSeconds()).padStart(2, '0');
+
+            return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+        }
+
+    </script>
+    <style>
+        /* Table Styling */
+        .form-table {
+            width: 74%;
+            margin-top: 0px;
+            border-spacing: 10px;
+        }
+
+            .form-table td {
+                padding: 10px;
+                vertical-align: top;
+            }
+
+            .form-table input {
+                width: 100%;
+                padding: 8px;
+                border-radius: 4px;
+                border: 1px solid #ccc;
+            }
+
+            .form-table button {
+                width: 100%;
+                padding: 10px;
+                border: none;
+                background-color: #007bff;
+                color: white;
+                font-size: 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                margin-top: 10px;
+            }
+
+                .form-table button[type="button"] {
+                    background-color: #dc3545; /* Red for Cancel */
+                }
+
+                .form-table button:hover {
+                    opacity: 0.8;
+                }
+    </style>
+}
